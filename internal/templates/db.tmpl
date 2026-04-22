@@ -1,0 +1,93 @@
+package main
+
+import (
+	"database/sql"
+	"fmt"
+
+	_ "github.com/go-sql-driver/mysql"
+)
+
+var db *sql.DB
+
+func initDB() error {
+	cfg := loadConfig()
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+	conn, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return fmt.Errorf("connecting to database: %w", err)
+	}
+	if err := conn.Ping(); err != nil {
+		masked := fmt.Sprintf("%s:****@tcp(%s:%d)/%s", cfg.User, cfg.Host, cfg.Port, cfg.Database)
+		return fmt.Errorf("connection failed (%s): %w", masked, err)
+	}
+	db = conn
+	return nil
+}
+
+func closeDB() {
+	if db != nil {
+		db.Close()
+	}
+}
+
+func scanRows(rows *sql.Rows) []map[string]interface{} {
+	colNames, _ := rows.Columns()
+	var results []map[string]interface{}
+	for rows.Next() {
+		vals := make([]interface{}, len(colNames))
+		valPtrs := make([]interface{}, len(colNames))
+		for i := range vals {
+			valPtrs[i] = &vals[i]
+		}
+		rows.Scan(valPtrs...)
+		row := make(map[string]interface{})
+		for i, col := range colNames {
+			row[col] = sanitizeValue(vals[i])
+		}
+		results = append(results, row)
+	}
+	return results
+}
+
+func scanSingleRow(row *sql.Row) (map[string]interface{}, error) {
+	// We need column names — use a separate query to get them
+	// For single-row queries, we reconstruct from the row itself
+	// sql.Row doesn't expose Columns(), so we use the pattern:
+	// query first for columns, then scan
+	return nil, fmt.Errorf("use scanSingleRowWithCols instead")
+}
+
+func scanSingleRowWithCols(row *sql.Row, colNames []string) (map[string]interface{}, error) {
+	vals := make([]interface{}, len(colNames))
+	valPtrs := make([]interface{}, len(colNames))
+	for i := range vals {
+		valPtrs[i] = &vals[i]
+	}
+	if err := row.Scan(valPtrs...); err != nil {
+		return nil, err
+	}
+	result := make(map[string]interface{})
+	for i, col := range colNames {
+		result[col] = sanitizeValue(vals[i])
+	}
+	return result, nil
+}
+
+func sanitizeValue(v interface{}) interface{} {
+	// MySQL driver returns []byte for string columns — convert to string
+	if b, ok := v.([]byte); ok {
+		return string(b)
+	}
+	return v
+}
+
+func joinStrings(parts []string, sep string) string {
+	result := ""
+	for i, p := range parts {
+		if i > 0 {
+			result += sep
+		}
+		result += p
+	}
+	return result
+}

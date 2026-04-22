@@ -1,0 +1,74 @@
+package main
+
+import (
+	"os"
+	"strconv"
+
+	"gopkg.in/yaml.v3"
+)
+
+type DBConfig struct {
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
+	Database string `yaml:"database"`
+}
+
+func loadConfig() *DBConfig {
+	cfg := &DBConfig{
+		Host:     "localhost",
+		Port:     3306,
+		User:     "root",
+		Database: "{{.Database}}",
+	}
+
+	// Config file
+	configPath := os.Getenv("HOME") + "/.every-mysql/{{.Database}}.yaml"
+	data, err := os.ReadFile(configPath)
+	if err == nil {
+		yaml.Unmarshal(data, cfg)
+	}
+
+	// Environment variables override config file
+	if v := os.Getenv("DB_HOST"); v != "" {
+		cfg.Host = v
+	}
+	if v := os.Getenv("DB_PORT"); v != "" {
+		cfg.Port, _ = strconv.Atoi(v)
+	}
+	if v := os.Getenv("DB_USER"); v != "" {
+		cfg.User = v
+	}
+	if v := os.Getenv("DB_PASSWORD"); v != "" {
+		cfg.Password = v
+	}
+	if v := os.Getenv("DB_NAME"); v != "" {
+		cfg.Database = v
+	}
+
+	// CLI flags override env vars
+	if dbHostFlag != "" {
+		cfg.Host = dbHostFlag
+	}
+	if dbPortFlag != 0 {
+		cfg.Port = dbPortFlag
+	}
+	if dbUserFlag != "" {
+		cfg.User = dbUserFlag
+	}
+	if dbPasswordFlag != "" {
+		cfg.Password = dbPasswordFlag
+	}
+	if dbNameFlag != "" {
+		cfg.Database = dbNameFlag
+	}
+
+	return cfg
+}
+
+var dbHostFlag string
+var dbPortFlag int
+var dbUserFlag string
+var dbPasswordFlag string
+var dbNameFlag string

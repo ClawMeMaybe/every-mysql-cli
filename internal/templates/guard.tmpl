@@ -1,0 +1,46 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+)
+
+func requireForce(cmdType string) {
+	if !forceFlag {
+		if jsonOutput {
+			errOut := map[string]string{"error": "destructive operation requires --force", "hint": "re-run with --force flag"}
+			b, _ := json.Marshal(errOut)
+			fmt.Println(string(b))
+		} else {
+			fmt.Printf("Warning: %s is a destructive operation. Re-run with --force to proceed.\n", cmdType)
+		}
+		os.Exit(1)
+	}
+}
+
+func requireForceWithConfirm(confirmMsg string) {
+	if !forceFlag {
+		if jsonOutput {
+			errOut := map[string]string{"error": "destructive operation requires --force", "hint": "re-run with --force flag"}
+			b, _ := json.Marshal(errOut)
+			fmt.Println(string(b))
+		} else {
+			fmt.Printf("Warning: this is a destructive operation. Re-run with --force to proceed.\n")
+		}
+		os.Exit(1)
+	}
+	if confirmValue != confirmMsg {
+		if jsonOutput {
+			errOut := map[string]string{"error": "confirmation required", "hint": "re-run with --confirm '" + confirmMsg + "'"}
+			b, _ := json.Marshal(errOut)
+			fmt.Println(string(b))
+		} else {
+			fmt.Printf("Confirmation required. Re-run with --confirm \"%s\"\n", confirmMsg)
+		}
+		os.Exit(1)
+	}
+}
+
+var forceFlag bool
+var confirmValue string

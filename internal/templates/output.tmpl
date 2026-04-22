@@ -1,0 +1,95 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"github.com/olekukonko/tablewriter"
+)
+
+type ListResult struct {
+	Data []map[string]interface{} `json:"data"`
+	Meta Meta                     `json:"meta"`
+}
+
+type Meta struct {
+	Total  int `json:"total"`
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+}
+
+func renderList(rows []map[string]interface{}, total, limit, offset int) {
+	if jsonOutput {
+		result := ListResult{
+			Data: rows,
+			Meta: Meta{Total: total, Limit: limit, Offset: offset},
+		}
+		out, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(out))
+		return
+	}
+
+	if len(rows) == 0 {
+		fmt.Println("No rows found.")
+		return
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader(headerFromRows(rows))
+	table.SetAutoFormatHeaders(false)
+	for _, row := range rows {
+		table.Append(valuesFromRow(row, table.Header()))
+	}
+	table.Render()
+	fmt.Printf("\nTotal: %d (limit: %d, offset: %d)\n", total, limit, offset)
+}
+
+func renderSingle(row map[string]interface{}) {
+	if jsonOutput {
+		out, _ := json.MarshalIndent(row, "", "  ")
+		fmt.Println(string(out))
+		return
+	}
+
+	for k, v := range row {
+		fmt.Printf("%s: %v\n", k, v)
+	}
+}
+
+func renderError(errMsg string, code string) {
+	if jsonOutput {
+		out, _ := json.MarshalIndent(map[string]string{"error": errMsg, "code": code}, "", "  ")
+		fmt.Println(string(out))
+		return
+	}
+	fmt.Printf("Error: %s\n", errMsg)
+}
+
+func renderSuccess(msg string) {
+	if jsonOutput {
+		out, _ := json.MarshalIndent(map[string]string{"status": "success", "message": msg}, "", "  ")
+		fmt.Println(string(out))
+		return
+	}
+	fmt.Println(msg)
+}
+
+func headerFromRows(rows []map[string]interface{}) []string {
+	if len(rows) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(rows[0]))
+	for k := range rows[0] {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func valuesFromRow(row map[string]interface{}, headers []string) []string {
+	vals := make([]string, len(headers))
+	for i, h := range headers {
+		vals[i] = fmt.Sprintf("%v", row[h])
+	}
+	return vals
+}

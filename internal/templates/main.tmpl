@@ -1,0 +1,26 @@
+package main
+
+import (
+	"os"
+
+	"github.com/spf13/cobra"
+)
+
+var jsonOutput bool
+
+func main() {
+	rootCmd := &cobra.Command{
+		Use:   "{{.Database}}-cli",
+		Short: "CLI for {{.Database}} MySQL database",
+	}
+
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format (for agents)")
+
+{{range .Tables}}
+	rootCmd.AddCommand({{.Name}}Cmd())
+{{end}}
+
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
