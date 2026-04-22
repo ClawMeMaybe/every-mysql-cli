@@ -17,9 +17,11 @@ func TemplateFuncs() map[string]interface{} {
 		"scanType":     scanType,
 		"valueStr":     valueStr,
 		"valueJSON":    valueJSON,
+		"valueJSONRel": valueJSONRel,
 		"isString":     func(c *types.Column) bool { return c.GoType == "string" },
 		"isAutoInc":    func(c *types.Column) bool { return c.AutoIncrement },
 		"isNullable":   func(c *types.Column) bool { return c.Nullable },
+		"lookupTable":  func(tc *TableContext, name string) *types.Table { return tc.LookupTable(name) },
 	}
 }
 
@@ -82,6 +84,23 @@ func valueStr(col *types.Column) string {
 
 func valueJSON(col *types.Column) string {
 	n := "s_" + col.Name
+	if col.Nullable {
+		switch col.GoType {
+		case "int64":
+			return n + ".Int64"
+		case "float64":
+			return n + ".Float64"
+		case "bool":
+			return n + ".Bool"
+		default:
+			return n + ".String"
+		}
+	}
+	return n
+}
+
+func valueJSONRel(col *types.Column, tableName string) string {
+	n := "r_" + tableName + "_" + col.Name
 	if col.Nullable {
 		switch col.GoType {
 		case "int64":

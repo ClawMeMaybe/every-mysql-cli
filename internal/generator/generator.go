@@ -34,9 +34,11 @@ func Generate(schema *types.Schema, outputDir string) error {
 	}
 
 	// Generate per-table command files
-	for _, table := range schema.Tables {
+	for i := range schema.Tables {
+		table := &schema.Tables[i]
+		tc := &TableContext{Table: table, Schema: schema}
 		filename := table.Name + "_cmd.go"
-		if err := renderTemplate(outputDir, filename, TableCmdTemplate, &table, funcs); err != nil {
+		if err := renderTemplate(outputDir, filename, TableCmdTemplate, tc, funcs); err != nil {
 			return err
 		}
 

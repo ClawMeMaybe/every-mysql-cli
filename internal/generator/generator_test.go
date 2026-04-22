@@ -92,19 +92,22 @@ func TestRenderGuardTemplate(t *testing.T) {
 }
 
 func TestRenderTableCmdTemplate_WithPK(t *testing.T) {
-	table := types.Table{
-		Name: "users",
-		Columns: []types.Column{
-			{Name: "id", Type: "INT", GoType: "int64", AutoIncrement: true},
-			{Name: "name", Type: "VARCHAR(255)", GoType: "string"},
-			{Name: "email", Type: "VARCHAR(255)", GoType: "string", Nullable: true},
+	tc := &TableContext{
+		Table: &types.Table{
+			Name: "users",
+			Columns: []types.Column{
+				{Name: "id", Type: "INT", GoType: "int64", AutoIncrement: true},
+				{Name: "name", Type: "VARCHAR(255)", GoType: "string"},
+				{Name: "email", Type: "VARCHAR(255)", GoType: "string", Nullable: true},
+			},
+			PrimaryKey: &types.PrimaryKey{Columns: []string{"id"}},
 		},
-		PrimaryKey: &types.PrimaryKey{Columns: []string{"id"}},
+		Schema: &types.Schema{Database: "testdb"},
 	}
 
 	tmpDir := t.TempDir()
 	funcs := TemplateFuncs()
-	err := renderTemplate(tmpDir, "users_cmd.go", TableCmdTemplate, &table, funcs)
+	err := renderTemplate(tmpDir, "users_cmd.go", TableCmdTemplate, tc, funcs)
 	if err != nil {
 		t.Fatalf("renderTemplate users_cmd.go: %v", err)
 	}
@@ -145,17 +148,20 @@ func TestRenderTableCmdTemplate_WithPK(t *testing.T) {
 }
 
 func TestRenderTableCmdTemplate_NoPK(t *testing.T) {
-	table := types.Table{
-		Name: "logs",
-		Columns: []types.Column{
-			{Name: "message", Type: "TEXT", GoType: "string"},
+	tc := &TableContext{
+		Table: &types.Table{
+			Name: "logs",
+			Columns: []types.Column{
+				{Name: "message", Type: "TEXT", GoType: "string"},
+			},
+			PrimaryKey: nil,
 		},
-		PrimaryKey: nil,
+		Schema: &types.Schema{Database: "testdb"},
 	}
 
 	tmpDir := t.TempDir()
 	funcs := TemplateFuncs()
-	err := renderTemplate(tmpDir, "logs_cmd.go", TableCmdTemplate, &table, funcs)
+	err := renderTemplate(tmpDir, "logs_cmd.go", TableCmdTemplate, tc, funcs)
 	if err != nil {
 		t.Fatalf("renderTemplate logs_cmd.go: %v", err)
 	}
@@ -181,24 +187,33 @@ func TestRenderTableCmdTemplate_NoPK(t *testing.T) {
 }
 
 func TestRenderTableCmdTemplate_FKFlags(t *testing.T) {
-	table := types.Table{
-		Name: "orders",
-		Columns: []types.Column{
-			{Name: "id", Type: "INT", GoType: "int64", AutoIncrement: true},
-			{Name: "user_id", Type: "INT", GoType: "int64"},
+	tc := &TableContext{
+		Table: &types.Table{
+			Name: "orders",
+			Columns: []types.Column{
+				{Name: "id", Type: "INT", GoType: "int64", AutoIncrement: true},
+				{Name: "user_id", Type: "INT", GoType: "int64"},
+			},
+			PrimaryKey: &types.PrimaryKey{Columns: []string{"id"}},
+			ForeignKeys: []types.ForeignKey{
+				{Name: "fk_user", Column: "user_id", ReferencedTable: "users", ReferencedColumn: "id"},
+			},
+			ReferencedBy: []types.RefReference{
+				{SourceTable: "products", SourceColumn: "order_id", ForeignKeyName: "fk_order"},
+			},
 		},
-		PrimaryKey: &types.PrimaryKey{Columns: []string{"id"}},
-		ForeignKeys: []types.ForeignKey{
-			{Name: "fk_user", Column: "user_id", ReferencedTable: "users", ReferencedColumn: "id"},
-		},
-		ReferencedBy: []types.RefReference{
-			{SourceTable: "products", SourceColumn: "order_id", ForeignKeyName: "fk_order"},
+		Schema: &types.Schema{
+			Database: "testdb",
+			Tables: []types.Table{
+				{Name: "orders"},
+				{Name: "products", Columns: []types.Column{{Name: "id", GoType: "int64"}, {Name: "order_id", GoType: "int64"}}},
+			},
 		},
 	}
 
 	tmpDir := t.TempDir()
 	funcs := TemplateFuncs()
-	err := renderTemplate(tmpDir, "orders_cmd.go", TableCmdTemplate, &table, funcs)
+	err := renderTemplate(tmpDir, "orders_cmd.go", TableCmdTemplate, tc, funcs)
 	if err != nil {
 		t.Fatalf("renderTemplate orders_cmd.go: %v", err)
 	}

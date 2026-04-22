@@ -217,33 +217,33 @@ const TableCmdTemplate = `package main
 import (
 	"database/sql"
 	"fmt"
-{{ if needsOS . }}	"os"
-{{ end }}{{ if needsStrconv . }}	"strconv"
+{{ if needsOS .Table }}	"os"
+{{ end }}{{ if needsStrconv .Table }}	"strconv"
 {{ end }}	"strings"
 	"github.com/spf13/cobra"
 )
 
-func {{ .Name }}Cmd(db *sql.DB) *cobra.Command {
+func {{ .Table.Name }}Cmd(db *sql.DB) *cobra.Command {
 	group := &cobra.Command{
-		Use:   "{{ .Name }}",
-		Short: "Commands for the {{ .Name }} table",
+		Use:   "{{ .Table.Name }}",
+		Short: "Commands for the {{ .Table.Name }} table",
 	}
-	group.AddCommand({{ .Name }}ListCmd(db))
-{{ if .PrimaryKey }}
-	group.AddCommand({{ .Name }}GetCmd(db))
-	group.AddCommand({{ .Name }}CreateCmd(db))
-	group.AddCommand({{ .Name }}UpdateCmd(db))
-	group.AddCommand({{ .Name }}DeleteCmd(db))
+	group.AddCommand({{ .Table.Name }}ListCmd(db))
+{{ if .Table.PrimaryKey }}
+	group.AddCommand({{ .Table.Name }}GetCmd(db))
+	group.AddCommand({{ .Table.Name }}CreateCmd(db))
+	group.AddCommand({{ .Table.Name }}UpdateCmd(db))
+	group.AddCommand({{ .Table.Name }}DeleteCmd(db))
 {{ else }}
-	// Note: {{ .Name }} has no primary key; get/update/delete omitted
+	// Note: {{ .Table.Name }} has no primary key; get/update/delete omitted
 {{ end }}
 	return group
 }
 
-func {{ .Name }}ListCmd(db *sql.DB) *cobra.Command {
+func {{ .Table.Name }}ListCmd(db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List rows from {{ .Name }}",
+		Short: "List rows from {{ .Table.Name }}",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			limit, _ := cmd.Flags().GetInt("limit")
@@ -253,11 +253,11 @@ func {{ .Name }}ListCmd(db *sql.DB) *cobra.Command {
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			if limit <= 0 { limit = 100 }
 
-			query := "SELECT * FROM {{ .Name }}"
+			query := "SELECT * FROM {{ .Table.Name }}"
 			var conditions []string
 			var qargs []interface{}
 
-{{ range .Columns }}
+{{ range .Table.Columns }}
 			if v, _ := cmd.Flags().GetString("{{ .Name }}"); v != "" {
 				conditions = append(conditions, "{{ .Name }} = ?")
 				qargs = append(qargs, v)
@@ -270,7 +270,7 @@ func {{ .Name }}ListCmd(db *sql.DB) *cobra.Command {
 {{ end }}
 {{ end }}
 
-{{ range .ForeignKeys }}
+{{ range .Table.ForeignKeys }}
 			if v, _ := cmd.Flags().GetString("by-{{ .ReferencedTable }}"); v != "" {
 				conditions = append(conditions, "{{ .Column }} = ?")
 				qargs = append(qargs, v)
@@ -297,7 +297,7 @@ func {{ .Name }}ListCmd(db *sql.DB) *cobra.Command {
 			}
 			defer rows.Close()
 
-{{ range .Columns }}
+{{ range .Table.Columns }}
 {{ if .Nullable }}
 {{ if eq .GoType "int64" }}
 			var s_{{ .Name }} sql.NullInt64
@@ -316,7 +316,7 @@ func {{ .Name }}ListCmd(db *sql.DB) *cobra.Command {
 			var tableRows [][]string
 			var jsonData []interface{}
 			scanArgs := []interface{}{
-{{ range .Columns }}				&s_{{ .Name }},
+{{ range .Table.Columns }}				&s_{{ .Name }},
 {{ end }}
 			}
 
@@ -326,14 +326,14 @@ func {{ .Name }}ListCmd(db *sql.DB) *cobra.Command {
 					return err
 				}
 				row := []string{
-{{ range .Columns }}
+{{ range .Table.Columns }}
 					{{ valueStr . }},
 {{ end }}
 				}
 				tableRows = append(tableRows, row)
 				if jsonMode {
 					entry := map[string]interface{}{
-{{ range .Columns }}
+{{ range .Table.Columns }}
 						"{{ .Name }}": {{ valueJSON . }},
 {{ end }}
 					}
@@ -357,35 +357,35 @@ func {{ .Name }}ListCmd(db *sql.DB) *cobra.Command {
 	cmd.Flags().String("order-by", "", "Column to order by")
 	cmd.Flags().String("order-dir", "asc", "Order direction (asc/desc)")
 	cmd.Flags().Bool("dry-run", false, "Print SQL without executing")
-{{ range .Columns }}
+{{ range .Table.Columns }}
 	cmd.Flags().String("{{ .Name }}", "", "Filter by {{ .Name }}")
 {{ if eq .GoType "string" }}
 	cmd.Flags().String("{{ .Name }}_like", "", "Filter {{ .Name }} with LIKE pattern")
 {{ end }}
 {{ end }}
-{{ range .ForeignKeys }}
+{{ range .Table.ForeignKeys }}
 	cmd.Flags().String("by-{{ .ReferencedTable }}", "", "Filter by {{ .ReferencedTable }} (FK: {{ .Column }})")
 {{ end }}
 	return cmd
 }
 
-{{ if .PrimaryKey }}
+{{ if .Table.PrimaryKey }}
 
-func {{ .Name }}GetCmd(db *sql.DB) *cobra.Command {
+func {{ .Table.Name }}GetCmd(db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get [primary-key-value]",
-		Short: "Get a single {{ .Name }} row by primary key",
+		Short: "Get a single {{ .Table.Name }} row by primary key",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			pkVal := args[0]
-			query := "SELECT * FROM {{ .Name }} WHERE {{ index .PrimaryKey.Columns 0 }} = ?"
+			query := "SELECT * FROM {{ .Table.Name }} WHERE {{ index .Table.PrimaryKey.Columns 0 }} = ?"
 			if dryRun {
 				fmt.Println("SQL:", query, pkVal)
 				return nil
 			}
-{{ range .Columns }}
+{{ range .Table.Columns }}
 {{ if .Nullable }}
 {{ if eq .GoType "int64" }}
 			var s_{{ .Name }} sql.NullInt64
@@ -401,7 +401,7 @@ func {{ .Name }}GetCmd(db *sql.DB) *cobra.Command {
 {{ end }}
 {{ end }}
 			err := db.QueryRow(query, pkVal).Scan(
-{{ range .Columns }}				&s_{{ .Name }},
+{{ range .Table.Columns }}				&s_{{ .Name }},
 {{ end }}
 			)
 			if err != nil {
@@ -413,44 +413,89 @@ func {{ .Name }}GetCmd(db *sql.DB) *cobra.Command {
 				if jsonMode { printJSONError("QUERY_ERROR", err.Error()) }
 				return err
 			}
-{{ range .ReferencedBy }}
+
+			result := map[string]interface{}{
+{{ range .Table.Columns }}				"{{ .Name }}": {{ valueJSON . }},
+{{ end }}
+			}
+
+{{ range .Table.ReferencedBy }}
 			if with{{ .SourceTable }}, _ := cmd.Flags().GetBool("with-{{ .SourceTable }}"); with{{ .SourceTable }} {
 				subRows, subErr := db.Query("SELECT * FROM {{ .SourceTable }} WHERE {{ .SourceColumn }} = ?", pkVal)
-				if subErr == nil { subRows.Close() }
+				if subErr != nil {
+					if jsonMode { printJSONError("QUERY_ERROR", subErr.Error()) }
+					return subErr
+				}
+				defer subRows.Close()
+{{ $srcTbl := .SourceTable }}
+{{ $relTable := lookupTable $ $srcTbl }}
+{{ range $relTable.Columns }}
+{{ if .Nullable }}
+{{ if eq .GoType "int64" }}
+				var r_{{ $srcTbl }}_{{ .Name }} sql.NullInt64
+{{ else if eq .GoType "float64" }}
+				var r_{{ $srcTbl }}_{{ .Name }} sql.NullFloat64
+{{ else if eq .GoType "bool" }}
+				var r_{{ $srcTbl }}_{{ .Name }} sql.NullBool
+{{ else }}
+				var r_{{ $srcTbl }}_{{ .Name }} sql.NullString
+{{ end }}
+{{ else }}
+				var r_{{ $srcTbl }}_{{ .Name }} {{ .GoType }}
+{{ end }}
+{{ end }}
+				var related{{ $srcTbl }} []interface{}
+				subScanArgs := []interface{}{
+{{ range $relTable.Columns }}					&r_{{ $srcTbl }}_{{ .Name }},
+{{ end }}
+				}
+				for subRows.Next() {
+					if err := subRows.Scan(subScanArgs...); err != nil { continue }
+					entry := map[string]interface{}{
+{{ range $relTable.Columns }}						"{{ .Name }}": {{ valueJSONRel . $srcTbl }},
+{{ end }}
+					}
+					related{{ $srcTbl }} = append(related{{ $srcTbl }}, entry)
+				}
+				result["{{ .SourceTable }}"] = related{{ $srcTbl }}
 			}
 {{ end }}
-			keys := []string{ {{ range .Columns }}"{{ .Name }}", {{ end }} }
-			values := []string{ {{ range .Columns }}{{ valueStr . }}, {{ end }} }
+
 			if jsonMode {
-				printJSONData(map[string]interface{}{
-{{ range .Columns }}					"{{ .Name }}": {{ valueJSON . }},
-{{ end }}
-				})
+				printJSONData(result)
 			} else {
+				keys := []string{ {{ range .Table.Columns }}"{{ .Name }}", {{ end }} }
+				values := []string{ {{ range .Table.Columns }}{{ valueStr . }}, {{ end }} }
 				printKV(keys, values)
+{{ range .Table.ReferencedBy }}
+				if with{{ .SourceTable }}, _ := cmd.Flags().GetBool("with-{{ .SourceTable }}"); with{{ .SourceTable }} {
+					fmt.Println("\nRelated {{ .SourceTable }}:")
+					fmt.Printf("  (use --json for full nested data)\n")
+				}
+{{ end }}
 			}
 			return nil
 		},
 	}
 	cmd.Flags().Bool("json", false, "Output in JSON format")
 	cmd.Flags().Bool("dry-run", false, "Print SQL without executing")
-{{ range .ReferencedBy }}
+{{ range .Table.ReferencedBy }}
 	cmd.Flags().Bool("with-{{ .SourceTable }}", false, "Eager-load related {{ .SourceTable }}")
 {{ end }}
 	return cmd
 }
 
-func {{ .Name }}CreateCmd(db *sql.DB) *cobra.Command {
+func {{ .Table.Name }}CreateCmd(db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create a new {{ .Name }} row",
+		Short: "Create a new {{ .Table.Name }} row",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			var columns []string
 			var placeholders []string
 			var values []interface{}
-{{ range .Columns }}
+{{ range .Table.Columns }}
 {{ if not .AutoIncrement }}
 			if v, _ := cmd.Flags().GetString("{{ .Name }}"); v != "" {
 				columns = append(columns, "{{ .Name }}")
@@ -469,7 +514,7 @@ func {{ .Name }}CreateCmd(db *sql.DB) *cobra.Command {
 			}
 {{ end }}
 {{ end }}
-			query := fmt.Sprintf("INSERT INTO {{ .Name }} (%s) VALUES (%s)", strings.Join(columns, ", "), strings.Join(placeholders, ", "))
+			query := fmt.Sprintf("INSERT INTO {{ .Table.Name }} (%s) VALUES (%s)", strings.Join(columns, ", "), strings.Join(placeholders, ", "))
 			if dryRun {
 				fmt.Println("SQL:", query, values)
 				return nil
@@ -490,7 +535,7 @@ func {{ .Name }}CreateCmd(db *sql.DB) *cobra.Command {
 	}
 	cmd.Flags().Bool("json", false, "Output in JSON format")
 	cmd.Flags().Bool("dry-run", false, "Print SQL without executing")
-{{ range .Columns }}
+{{ range .Table.Columns }}
 {{ if not .AutoIncrement }}
 	cmd.Flags().String("{{ .Name }}", "", "Value for {{ .Name }}")
 {{ end }}
@@ -498,10 +543,10 @@ func {{ .Name }}CreateCmd(db *sql.DB) *cobra.Command {
 	return cmd
 }
 
-func {{ .Name }}UpdateCmd(db *sql.DB) *cobra.Command {
+func {{ .Table.Name }}UpdateCmd(db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update [primary-key-value]",
-		Short: "Update a {{ .Name }} row by primary key",
+		Short: "Update a {{ .Table.Name }} row by primary key",
 		Args:  cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
@@ -515,7 +560,7 @@ func {{ .Name }}UpdateCmd(db *sql.DB) *cobra.Command {
 			}
 			var setClauses []string
 			var values []interface{}
-{{ range .Columns }}
+{{ range .Table.Columns }}
 {{ if not .AutoIncrement }}
 			if v, _ := cmd.Flags().GetString("{{ .Name }}"); v != "" {
 				setClauses = append(setClauses, "{{ .Name }} = ?")
@@ -533,9 +578,9 @@ func {{ .Name }}UpdateCmd(db *sql.DB) *cobra.Command {
 			}
 {{ end }}
 {{ end }}
-			query := fmt.Sprintf("UPDATE {{ .Name }} SET %s", strings.Join(setClauses, ", "))
+			query := fmt.Sprintf("UPDATE {{ .Table.Name }} SET %s", strings.Join(setClauses, ", "))
 			if len(args) == 1 {
-				query += " WHERE {{ index .PrimaryKey.Columns 0 }} = ?"
+				query += " WHERE {{ index .Table.PrimaryKey.Columns 0 }} = ?"
 				values = append(values, args[0])
 			}
 			if dryRun {
@@ -559,7 +604,7 @@ func {{ .Name }}UpdateCmd(db *sql.DB) *cobra.Command {
 	cmd.Flags().Bool("json", false, "Output in JSON format")
 	cmd.Flags().Bool("force", false, "Required for destructive operations")
 	cmd.Flags().Bool("dry-run", false, "Print SQL without executing")
-{{ range .Columns }}
+{{ range .Table.Columns }}
 {{ if not .AutoIncrement }}
 	cmd.Flags().String("{{ .Name }}", "", "New value for {{ .Name }}")
 {{ end }}
@@ -567,10 +612,10 @@ func {{ .Name }}UpdateCmd(db *sql.DB) *cobra.Command {
 	return cmd
 }
 
-func {{ .Name }}DeleteCmd(db *sql.DB) *cobra.Command {
+func {{ .Table.Name }}DeleteCmd(db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete [primary-key-value]",
-		Short: "Delete a {{ .Name }} row by primary key",
+		Short: "Delete a {{ .Table.Name }} row by primary key",
 		Args:  cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
@@ -598,10 +643,10 @@ func {{ .Name }}DeleteCmd(db *sql.DB) *cobra.Command {
 					requireForceWithConfirm(cmd.CommandPath(), "I understand this deletes all rows")
 				}
 			}
-			query := "DELETE FROM {{ .Name }}"
+			query := "DELETE FROM {{ .Table.Name }}"
 			var values []interface{}
 			if !all && len(args) == 1 {
-				query += " WHERE {{ index .PrimaryKey.Columns 0 }} = ?"
+				query += " WHERE {{ index .Table.PrimaryKey.Columns 0 }} = ?"
 				values = append(values, args[0])
 			}
 			if dryRun {
