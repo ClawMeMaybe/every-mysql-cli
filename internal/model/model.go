@@ -11,6 +11,7 @@ type Table struct {
 	RowCount     int64
 	Columns      []Column
 	PrimaryKey   *PrimaryKey
+	HasPK        bool
 	ForeignKeys  []ForeignKey
 	ReferencedBy []RefReference
 	Indexes      []Index
@@ -23,10 +24,6 @@ type Column struct {
 	Nullable      bool
 	Default       string
 	AutoIncrement bool
-}
-
-type PrimaryKey struct {
-	Columns []string
 }
 
 type ForeignKey struct {
@@ -42,6 +39,10 @@ type RefReference struct {
 	SourceTable    string
 	SourceColumn   string
 	ForeignKeyName string
+}
+
+type PrimaryKey struct {
+	Columns []string
 }
 
 type Index struct {
