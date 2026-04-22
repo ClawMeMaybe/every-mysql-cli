@@ -1,0 +1,21 @@
+# Build output
+every-mysql-cli
+*.exe
+
+# Generated CLI output directories
+*-cli/
+
+# Test binary
+*.test
+
+# Go workspace
+go.work
+
+# OMC state
+.omc/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
