@@ -116,7 +116,7 @@ type Index struct {
 
 ### FK direction and command generation
 
-- **Outbound FKs** (`ForeignKeys`): Generate `--by-<table>` flags on the referenced table's `list` command. If `orders.user_id` references `users.id`, then `orders list --by-user 5` translates to `WHERE orders.user_id = 5`.
+- **Outbound FKs** (`ForeignKeys`): Generate `--by-<table>` flags on the **source table's** `list` command. If `orders.user_id` references `users.id`, then `orders list --by-user 5` translates to `WHERE orders.user_id = 5` — the flag appears on the table that holds the FK column.
 - **Inbound references** (`ReferencedBy`): Generate `--with-<table>` flags on this table's `get` command. If `orders.user_id` references `users.id`, then `users get 42 --with-orders` eager-loads all orders for user 42 as a nested structure.
 
 ### MySQL-to-Go type mapping
@@ -150,7 +150,7 @@ type Index struct {
 | `get` | Fetch single row by primary key | `users get 42` |
 | `create` | Insert new row, flags for each non-auto-increment column | `users create --name "Alice" --email alice@x.com` |
 | `update` | Update row by primary key, flags for updatable columns | `users update 42 --name "Bob"` |
-| `delete` | Delete row by primary key (requires `--force`) | `users delete 42 --force` |
+| `delete` | Delete row by primary key (requires `--force`). `--all` variant deletes all rows, requires `--force --confirm "I understand..."` | `users delete 42 --force` |
 
 ### Relation helpers
 
@@ -257,7 +257,7 @@ Priority order:
 2. **Config file:** `~/.every-mysql/<database>.yaml` (created by init)
 3. **Flags on every command:** `--db-host`, `--db-port`, etc.
 
-Agents should prefer env vars to avoid storing secrets in files.
+Agents should prefer env vars to avoid storing secrets in files. Password in config file is stored in plaintext for human convenience — agents should use `DB_PASSWORD` env var instead.
 
 ### Config file format
 
