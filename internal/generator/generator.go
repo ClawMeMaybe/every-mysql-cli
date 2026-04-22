@@ -6,11 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/kefan/every-mysql-cli/internal/model"
 	"github.com/kefan/every-mysql-cli/internal/scanner"
 	"github.com/kefan/every-mysql-cli/internal/templates"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type Config struct {
@@ -20,6 +22,14 @@ type Config struct {
 	Password string
 	Database string
 	Output   string
+}
+
+type tableContext struct {
+	Schema      *model.Schema
+	Table       model.Table
+	ColumnList  string
+	PKColumn    string
+	ColNamesLit string
 }
 
 func Generate(cfg Config) error {
@@ -54,7 +64,7 @@ func Generate(cfg Config) error {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
 
-	tmpls := templates.All()
+	tmpls := templates.All
 
 	if err := renderFile(cfg.Output, "main.go", tmpls["main"], schema); err != nil {
 		return fmt.Errorf("generating main.go: %w", err)
@@ -62,19 +72,29 @@ func Generate(cfg Config) error {
 	if err := renderFile(cfg.Output, "db.go", tmpls["db"], schema); err != nil {
 		return fmt.Errorf("generating db.go: %w", err)
 	}
-	if err := renderFile(cfg.Output, "guard.go", tmpls["guard"], schema); err != nil {
+	if err := renderFile(cfg.Output, "guard.go", tmpls["guard"], nil); err != nil {
 		return fmt.Errorf("generating guard.go: %w", err)
 	}
-	if err := renderFile(cfg.Output, "output.go", tmpls["output"], schema); err != nil {
+	if err := renderFile(cfg.Output, "output.go", tmpls["output"], nil); err != nil {
 		return fmt.Errorf("generating output.go: %w", err)
 	}
 	if err := renderFile(cfg.Output, "config.go", tmpls["config"], schema); err != nil {
 		return fmt.Errorf("generating config.go: %w", err)
 	}
+	if err := renderFile(cfg.Output, "helpers.go", tmpls["helpers"], nil); err != nil {
+		return fmt.Errorf("generating helpers.go: %w", err)
+	}
 
 	for _, t := range schema.Tables {
 		filename := t.Name + "_cmd.go"
-		if err := renderFile(cfg.Output, filename, tmpls["table_cmd"], &tableContext{Schema: schema, Table: t}); err != nil {
+		ctx := &tableContext{
+			Schema:      schema,
+			Table:       t,
+			ColumnList:  buildColumnList(t),
+			PKColumn:    pkColumn(t),
+			ColNamesLit: buildColNamesLit(t),
+		}
+		if err := renderFile(cfg.Output, filename, tmpls["table_cmd"], ctx); err != nil {
 			return fmt.Errorf("generating %s: %w", filename, err)
 		}
 	}
@@ -99,39 +119,31 @@ func Generate(cfg Config) error {
 	return nil
 }
 
-type tableContext struct {
-	Schema       *model.Schema
-	Table        model.Table
-	ColNamesExpr string // precomputed Go string literal: `"id", "name", ...`
+func buildColumnList(t model.Table) string {
+	names := make([]string, len(t.Columns))
+	for i, c := range t.Columns {
+		names[i] = c.Name
+	}
+	return strings.Join(names, ", ")
 }
 
-func colNamesExpr(t model.Table) string {
+func buildColNamesLit(t model.Table) string {
 	parts := make([]string, len(t.Columns))
 	for i, c := range t.Columns {
-		parts[i] = `"` + c.Name + `"`
+		parts[i] = fmt.Sprintf("\"%s\"", c.Name)
 	}
-	return joinCommas(parts)
+	return strings.Join(parts, ", ")
 }
 
-func joinCommas(parts []string) string {
-	result := ""
-	for i, p := range parts {
-		if i > 0 {
-			result += ", "
-		}
-		result += p
+func pkColumn(t model.Table) string {
+	if t.PrimaryKey != nil && len(t.PrimaryKey.Columns) > 0 {
+		return t.PrimaryKey.Columns[0]
 	}
-	return result
+	return ""
 }
 
 func renderFile(dir, filename, tmplStr string, data interface{}) error {
-	// Precompute colNamesExpr for table contexts
-	if tc, ok := data.(*tableContext); ok {
-		tc.ColNamesExpr = colNamesExpr(tc.Table)
-		data = tc
-	}
-
-	tmpl, err := template.New(filename).Funcs(templates.FuncMap()).Parse(tmplStr)
+	tmpl, err := template.New(filename).Parse(tmplStr)
 	if err != nil {
 		return fmt.Errorf("parsing template %s: %w", filename, err)
 	}
