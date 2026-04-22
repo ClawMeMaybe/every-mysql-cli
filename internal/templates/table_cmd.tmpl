@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var {{.Table.Name}}ColNames = []string{{"{"}}{{.ColNamesExpr}}{{"}"}}
+
 func {{.Table.Name}}Cmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "{{.Table.Name}}",
@@ -122,7 +124,7 @@ func {{.Table.Name}}ListCmd() *cobra.Command {
 			}
 			defer rows.Close()
 
-			results := scanRows(rows, nil)
+			results := scanRows(rows)
 			total := len(results)
 			renderList(results, total, {{.Table.Name}}Limit, {{.Table.Name}}Offset)
 			return nil
@@ -166,7 +168,8 @@ func {{.Table.Name}}GetCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pkVal := args[0]
-			query := "SELECT * FROM {{.Table.Name}} WHERE {{(indexPK .Table 0)}} = ?"
+			pkCol := "{{(indexPK .Table 0)}}"
+			query := fmt.Sprintf("SELECT * FROM {{.Table.Name}} WHERE %s = ?", pkCol)
 
 			if {{.Table.Name}}DryRun {
 				fmt.Println("SQL:", query, "with arg:", pkVal)
@@ -174,7 +177,7 @@ func {{.Table.Name}}GetCmd() *cobra.Command {
 			}
 
 			row := db.QueryRow(query, pkVal)
-			result, err := scanSingleRow(row, nil)
+			result, err := scanSingleRowWithCols(row, {{.Table.Name}}ColNames)
 			if err != nil {
 				if err == sql.ErrNoRows {
 					renderError("row not found", "NOT_FOUND")
@@ -191,7 +194,7 @@ func {{.Table.Name}}GetCmd() *cobra.Command {
 					result["{{.SourceTable}}"] = map[string]string{"error": relErr.Error()}
 				} else {
 					defer relatedRows.Close()
-					result["{{.SourceTable}}"] = scanRows(relatedRows, nil)
+					result["{{.SourceTable}}"] = scanRows(relatedRows)
 				}
 			}
 {{end}}
@@ -201,7 +204,7 @@ func {{.Table.Name}}GetCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVar(&{{.Table.Name}}DryRun, "dry-run", false, "Print SQL without executing")
+	cmd.Flags().BoolVar(&{{.Table.Name}}GetDryRun, "dry-run", false, "Print SQL without executing")
 {{range .Table.ReferencedBy}}
 	cmd.Flags().BoolVar(&{{$.Table.Name}}With_{{.SourceTable}}, "with-{{.SourceTable}}", false, "Eager-load related {{.SourceTable}}")
 {{end}}
@@ -289,6 +292,7 @@ func {{.Table.Name}}UpdateCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pkVal := args[0]
+			pkCol := "{{(indexPK .Table 0)}}"
 			var cols []string
 			var argValues []interface{}
 
@@ -307,7 +311,7 @@ func {{.Table.Name}}UpdateCmd() *cobra.Command {
 			}
 
 			argValues = append(argValues, pkVal)
-			query := fmt.Sprintf("UPDATE {{.Table.Name}} SET %s WHERE {{(indexPK .Table 0)}} = ?", joinStrings(cols, ", "))
+			query := fmt.Sprintf("UPDATE {{.Table.Name}} SET %s WHERE %s = ?", joinStrings(cols, ", "), pkCol)
 
 			if {{.Table.Name}}UpdateDryRun {
 				fmt.Println("SQL:", query)
@@ -372,7 +376,8 @@ func {{.Table.Name}}DeleteCmd() *cobra.Command {
 			requireForce("delete")
 
 			pkVal := args[0]
-			query := "DELETE FROM {{.Table.Name}} WHERE {{(indexPK .Table 0)}} = ?"
+			pkCol := "{{(indexPK .Table 0)}}"
+			query := fmt.Sprintf("DELETE FROM {{.Table.Name}} WHERE %s = ?", pkCol)
 
 			if {{.Table.Name}}DeleteDryRun {
 				fmt.Println("SQL:", query, "with arg:", pkVal)

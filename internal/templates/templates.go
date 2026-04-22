@@ -2,6 +2,8 @@ package templates
 
 import (
 	"embed"
+
+	"github.com/kefan/every-mysql-cli/internal/model"
 )
 
 //go:embed *.tmpl
@@ -18,4 +20,24 @@ func All() map[string]string {
 		result[name] = string(data)
 	}
 	return result
+}
+
+// FuncMap returns template helper functions used during code generation.
+func FuncMap() map[string]interface{} {
+	return map[string]interface{}{
+		"indexPK": func(t model.Table, idx int) string {
+			if t.PrimaryKey != nil && len(t.PrimaryKey.Columns) > idx {
+				return t.PrimaryKey.Columns[idx]
+			}
+			return ""
+		},
+		"indexColumnGoType": func(t model.Table, colName string) string {
+			for _, c := range t.Columns {
+				if c.Name == colName {
+					return c.GoType
+				}
+			}
+			return "string"
+		},
+	}
 }

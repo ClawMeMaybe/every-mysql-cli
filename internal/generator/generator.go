@@ -100,15 +100,38 @@ func Generate(cfg Config) error {
 }
 
 type tableContext struct {
-	Schema *model.Schema
-	Table  model.Table
+	Schema       *model.Schema
+	Table        model.Table
+	ColNamesExpr string // precomputed Go string literal: `"id", "name", ...`
+}
+
+func colNamesExpr(t model.Table) string {
+	parts := make([]string, len(t.Columns))
+	for i, c := range t.Columns {
+		parts[i] = `"` + c.Name + `"`
+	}
+	return joinCommas(parts)
+}
+
+func joinCommas(parts []string) string {
+	result := ""
+	for i, p := range parts {
+		if i > 0 {
+			result += ", "
+		}
+		result += p
+	}
+	return result
 }
 
 func renderFile(dir, filename, tmplStr string, data interface{}) error {
-	tmpl, err := template.New(filename).Funcs(template.FuncMap{
-		"indexColumnGoType": indexColumnGoType,
-		"indexPK":           indexPK,
-	}).Parse(tmplStr)
+	// Precompute colNamesExpr for table contexts
+	if tc, ok := data.(*tableContext); ok {
+		tc.ColNamesExpr = colNamesExpr(tc.Table)
+		data = tc
+	}
+
+	tmpl, err := template.New(filename).Funcs(templates.FuncMap()).Parse(tmplStr)
 	if err != nil {
 		return fmt.Errorf("parsing template %s: %w", filename, err)
 	}
@@ -124,22 +147,6 @@ func renderFile(dir, filename, tmplStr string, data interface{}) error {
 		return fmt.Errorf("rendering template %s: %w", filename, err)
 	}
 	return nil
-}
-
-func indexColumnGoType(t model.Table, colName string) string {
-	for _, c := range t.Columns {
-		if c.Name == colName {
-			return c.GoType
-		}
-	}
-	return "string"
-}
-
-func indexPK(t model.Table, idx int) string {
-	if t.PrimaryKey != nil && len(t.PrimaryKey.Columns) > idx {
-		return t.PrimaryKey.Columns[idx]
-	}
-	return ""
 }
 
 func writeGoMod(dir, dbName string) error {

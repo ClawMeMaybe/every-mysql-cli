@@ -2,7 +2,10 @@ module github.com/kefan/every-mysql-cli
 
 go 1.22
 
-require github.com/spf13/cobra v1.8.0
+require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/spf13/cobra v1.8.0
+)
 
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
