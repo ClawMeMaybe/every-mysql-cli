@@ -1,0 +1,1 @@
+# every-mysql-cli
