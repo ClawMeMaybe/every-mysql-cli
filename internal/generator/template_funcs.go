@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/kefan/every-mysql-cli/internal/types"
@@ -21,7 +22,10 @@ func TemplateFuncs() map[string]interface{} {
 		"isString":     func(c *types.Column) bool { return c.GoType == "string" },
 		"isAutoInc":    func(c *types.Column) bool { return c.AutoIncrement },
 		"isNullable":   func(c *types.Column) bool { return c.Nullable },
-		"lookupTable":  func(tc *TableContext, name string) *types.Table { return tc.LookupTable(name) },
+		"lookupTable":   func(tc *TableContext, name string) *types.Table { return tc.LookupTable(name) },
+			"pkArgCount":    pkArgCount,
+			"pkWhereClause": pkWhereClause,
+			"pkScanArgs":    pkScanArgs,
 	}
 }
 
@@ -114,4 +118,33 @@ func valueJSONRel(col *types.Column, tableName string) string {
 		}
 	}
 	return n
+}
+
+func pkArgCount(t *types.Table) int {
+	if t.PrimaryKey == nil {
+		return 0
+	}
+	return len(t.PrimaryKey.Columns)
+}
+
+func pkWhereClause(t *types.Table) string {
+	if t.PrimaryKey == nil || len(t.PrimaryKey.Columns) == 0 {
+		return ""
+	}
+	clauses := make([]string, len(t.PrimaryKey.Columns))
+	for i, col := range t.PrimaryKey.Columns {
+		clauses[i] = fmt.Sprintf("%s = ?", col)
+	}
+	return strings.Join(clauses, " AND ")
+}
+
+func pkScanArgs(t *types.Table) string {
+	if t.PrimaryKey == nil || len(t.PrimaryKey.Columns) == 0 {
+		return ""
+	}
+	parts := make([]string, len(t.PrimaryKey.Columns))
+	for i := range t.PrimaryKey.Columns {
+		parts[i] = fmt.Sprintf("args[%d]", i)
+	}
+	return strings.Join(parts, ", ")
 }

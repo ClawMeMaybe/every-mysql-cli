@@ -346,6 +346,153 @@ func TestTemplateFuncs_ScanType(t *testing.T) {
 	}
 }
 
+func TestTemplateFuncs_PK(t *testing.T) {
+	singlePK := &types.Table{
+		Name: "users",
+		PrimaryKey: &types.PrimaryKey{Columns: []string{"id"}},
+	}
+	compositePK := &types.Table{
+		Name: "order_items",
+		PrimaryKey: &types.PrimaryKey{Columns: []string{"order_id", "item_id"}},
+	}
+	noPK := &types.Table{
+		Name: "logs",
+		PrimaryKey: nil,
+	}
+
+	tests := []struct {
+		name string
+		table *types.Table
+		argCount int
+		whereClause string
+		scanArgs string
+	}{
+		{"single PK", singlePK, 1, "id = ?", "args[0]"},
+		{"composite PK", compositePK, 2, "order_id = ? AND item_id = ?", "args[0], args[1]"},
+		{"no PK", noPK, 0, "", ""},
+	}
+	for _, tc := range tests {
+		gotArgCount := pkArgCount(tc.table)
+		if gotArgCount != tc.argCount {
+			t.Errorf("pkArgCount(%s) = %d, want %d", tc.name, gotArgCount, tc.argCount)
+		}
+		gotWhere := pkWhereClause(tc.table)
+		if gotWhere != tc.whereClause {
+			t.Errorf("pkWhereClause(%s) = %s, want %s", tc.name, gotWhere, tc.whereClause)
+		}
+		gotScan := pkScanArgs(tc.table)
+		if gotScan != tc.scanArgs {
+			t.Errorf("pkScanArgs(%s) = %s, want %s", tc.name, gotScan, tc.scanArgs)
+		}
+	}
+}
+
+func TestRenderTableCmdTemplate_CompositePK(t *testing.T) {
+	tc := &TableContext{
+		Table: &types.Table{
+			Name: "order_items",
+			Columns: []types.Column{
+				{Name: "order_id", Type: "INT", GoType: "int64"},
+				{Name: "item_id", Type: "INT", GoType: "int64"},
+				{Name: "quantity", Type: "INT", GoType: "int64"},
+			},
+			PrimaryKey: &types.PrimaryKey{Columns: []string{"order_id", "item_id"}},
+		},
+		Schema: &types.Schema{Database: "testdb"},
+	}
+
+	tmpDir := t.TempDir()
+	funcs := TemplateFuncs()
+	err := renderTemplate(tmpDir, "order_items_cmd.go", TableCmdTemplate, tc, funcs)
+	if err != nil {
+		t.Fatalf("renderTemplate: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(tmpDir, "order_items_cmd.go"))
+	if err != nil {
+		t.Fatalf("reading generated file: %v", err)
+	}
+
+	s := string(content)
+	if !contains(s, "ExactArgs(2)") {
+		t.Error("get command should require 2 args for composite PK")
+	}
+	if !contains(s, "order_id = ? AND item_id = ?") {
+		t.Error("WHERE clause should use all composite PK columns")
+	}
+	if !contains(s, "RangeArgs(0, 2)") {
+		t.Error("update/delete should accept up to 2 args for composite PK")
+	}
+	if !contains(s, "args[0], args[1]") {
+		t.Error("composite PK query args should use args[0] and args[1]")
+	}
+}
+
+func TestRenderTableCmdTemplate_BoolColumn(t *testing.T) {
+	tc := &TableContext{
+		Table: &types.Table{
+			Name: "users",
+			Columns: []types.Column{
+				{Name: "id", Type: "INT", GoType: "int64", AutoIncrement: true},
+				{Name: "active", Type: "BOOLEAN", GoType: "bool"},
+			},
+			PrimaryKey: &types.PrimaryKey{Columns: []string{"id"}},
+		},
+		Schema: &types.Schema{Database: "testdb"},
+	}
+
+	tmpDir := t.TempDir()
+	funcs := TemplateFuncs()
+	err := renderTemplate(tmpDir, "users_cmd.go", TableCmdTemplate, tc, funcs)
+	if err != nil {
+		t.Fatalf("renderTemplate: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(tmpDir, "users_cmd.go"))
+	if err != nil {
+		t.Fatalf("reading generated file: %v", err)
+	}
+
+	s := string(content)
+	if !contains(s, "strconv.ParseBool") {
+		t.Error("bool columns should use strconv.ParseBool in create/update")
+	}
+}
+
+func TestRenderTableCmdTemplate_DeleteGuardNoAll(t *testing.T) {
+	tc := &TableContext{
+		Table: &types.Table{
+			Name: "users",
+			Columns: []types.Column{
+				{Name: "id", Type: "INT", GoType: "int64", AutoIncrement: true},
+				{Name: "name", Type: "VARCHAR(255)", GoType: "string"},
+			},
+			PrimaryKey: &types.PrimaryKey{Columns: []string{"id"}},
+		},
+		Schema: &types.Schema{Database: "testdb"},
+	}
+
+	tmpDir := t.TempDir()
+	funcs := TemplateFuncs()
+	err := renderTemplate(tmpDir, "users_cmd.go", TableCmdTemplate, tc, funcs)
+	if err != nil {
+		t.Fatalf("renderTemplate: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(tmpDir, "users_cmd.go"))
+	if err != nil {
+		t.Fatalf("reading generated file: %v", err)
+	}
+
+	s := string(content)
+	if !contains(s, "len(args) == 0 && !all") {
+		t.Error("delete should reject zero-arg invocation without --all")
+	}
+	if !contains(s, "requires a primary key or --all flag") {
+		t.Error("delete guard should mention --all requirement")
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstr(s, substr))
 }

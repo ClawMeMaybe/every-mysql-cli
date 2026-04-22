@@ -375,14 +375,13 @@ func {{ .Table.Name }}GetCmd(db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get [primary-key-value]",
 		Short: "Get a single {{ .Table.Name }} row by primary key",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.ExactArgs({{ pkArgCount .Table }}),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
-			pkVal := args[0]
-			query := "SELECT * FROM {{ .Table.Name }} WHERE {{ index .Table.PrimaryKey.Columns 0 }} = ?"
+			query := "SELECT * FROM {{ .Table.Name }} WHERE {{ pkWhereClause .Table }}"
 			if dryRun {
-				fmt.Println("SQL:", query, pkVal)
+				fmt.Println("SQL:", query, {{ pkScanArgs .Table }})
 				return nil
 			}
 {{ range .Table.Columns }}
@@ -400,7 +399,7 @@ func {{ .Table.Name }}GetCmd(db *sql.DB) *cobra.Command {
 			var s_{{ .Name }} {{ .GoType }}
 {{ end }}
 {{ end }}
-			err := db.QueryRow(query, pkVal).Scan(
+			err := db.QueryRow(query, {{ pkScanArgs .Table }}).Scan(
 {{ range .Table.Columns }}				&s_{{ .Name }},
 {{ end }}
 			)
@@ -421,7 +420,7 @@ func {{ .Table.Name }}GetCmd(db *sql.DB) *cobra.Command {
 
 {{ range .Table.ReferencedBy }}
 			if with{{ .SourceTable }}, _ := cmd.Flags().GetBool("with-{{ .SourceTable }}"); with{{ .SourceTable }} {
-				subRows, subErr := db.Query("SELECT * FROM {{ .SourceTable }} WHERE {{ .SourceColumn }} = ?", pkVal)
+				subRows, subErr := db.Query("SELECT * FROM {{ .SourceTable }} WHERE {{ .SourceColumn }} = ?", args[0])
 				if subErr != nil {
 					if jsonMode { printJSONError("QUERY_ERROR", subErr.Error()) }
 					return subErr
@@ -508,6 +507,10 @@ func {{ .Table.Name }}CreateCmd(db *sql.DB) *cobra.Command {
 				fval, err := strconv.ParseFloat(v, 64)
 				if err != nil { return err }
 				values = append(values, fval)
+{{ else if eq .GoType "bool" }}
+				bval, err := strconv.ParseBool(v)
+				if err != nil { return err }
+				values = append(values, bval)
 {{ else }}
 				values = append(values, v)
 {{ end }}
@@ -547,7 +550,7 @@ func {{ .Table.Name }}UpdateCmd(db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update [primary-key-value]",
 		Short: "Update a {{ .Table.Name }} row by primary key",
-		Args:  cobra.RangeArgs(0, 1),
+		Args:  cobra.RangeArgs(0, {{ pkArgCount .Table }}),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			force, _ := cmd.Flags().GetBool("force")
@@ -572,6 +575,10 @@ func {{ .Table.Name }}UpdateCmd(db *sql.DB) *cobra.Command {
 				fval, err := strconv.ParseFloat(v, 64)
 				if err != nil { return err }
 				values = append(values, fval)
+{{ else if eq .GoType "bool" }}
+				bval, err := strconv.ParseBool(v)
+				if err != nil { return err }
+				values = append(values, bval)
 {{ else }}
 				values = append(values, v)
 {{ end }}
@@ -579,9 +586,9 @@ func {{ .Table.Name }}UpdateCmd(db *sql.DB) *cobra.Command {
 {{ end }}
 {{ end }}
 			query := fmt.Sprintf("UPDATE {{ .Table.Name }} SET %s", strings.Join(setClauses, ", "))
-			if len(args) == 1 {
-				query += " WHERE {{ index .Table.PrimaryKey.Columns 0 }} = ?"
-				values = append(values, args[0])
+			if len(args) == {{ pkArgCount .Table }} {
+				query += " WHERE {{ pkWhereClause .Table }}"
+				values = append(values, {{ pkScanArgs .Table }})
 			}
 			if dryRun {
 				fmt.Println("SQL:", query, values)
@@ -616,12 +623,20 @@ func {{ .Table.Name }}DeleteCmd(db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete [primary-key-value]",
 		Short: "Delete a {{ .Table.Name }} row by primary key",
-		Args:  cobra.RangeArgs(0, 1),
+		Args:  cobra.RangeArgs(0, {{ pkArgCount .Table }}),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			force, _ := cmd.Flags().GetBool("force")
 			all, _ := cmd.Flags().GetBool("all")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			if len(args) == 0 && !all {
+				if jsonMode {
+					guardDestructiveJSON("delete requires a primary key or --all flag", "provide a primary key value or re-run with --all --force --confirm \"I understand this deletes all rows\"")
+				}
+				fmt.Fprintln(os.Stderr, "Error: delete requires a primary key value or the --all flag.")
+				fmt.Fprintf(os.Stderr, "Hint: provide a key value, or re-run with --all --force --confirm \"I understand this deletes all rows\"\n")
+				os.Exit(1)
+			}
 			if !force {
 				if all {
 					if jsonMode {
@@ -645,9 +660,9 @@ func {{ .Table.Name }}DeleteCmd(db *sql.DB) *cobra.Command {
 			}
 			query := "DELETE FROM {{ .Table.Name }}"
 			var values []interface{}
-			if !all && len(args) == 1 {
-				query += " WHERE {{ index .Table.PrimaryKey.Columns 0 }} = ?"
-				values = append(values, args[0])
+			if !all && len(args) == {{ pkArgCount .Table }} {
+				query += " WHERE {{ pkWhereClause .Table }}"
+				values = append(values, {{ pkScanArgs .Table }})
 			}
 			if dryRun {
 				fmt.Println("SQL:", query, values)
