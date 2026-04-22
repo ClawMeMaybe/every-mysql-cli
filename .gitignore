@@ -1,0 +1,30 @@
+# Binaries
+/every-mysql-cli
+/cmd/every-mysql-cli/every-mysql-cli
+*.exe
+
+# Generated output directories (top-level only)
+/*-cli/
+
+# Go build artifacts
+*.o
+*.a
+
+# Test artifacts
+*.test
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+
+# OMC internal
+.omc/
+state/
+
+# Config directory (local dev)
+.every-mysql/
