@@ -310,25 +310,6 @@ func TestTemplateFuncs_ValueJSON(t *testing.T) {
 	}
 }
 
-func TestTemplateFuncs_CreateConv(t *testing.T) {
-	tests := []struct {
-		name string
-		col  types.Column
-		want string
-	}{
-		{"int64", types.Column{GoType: "int64"}, "strconv.ParseInt(v, 10, 64)"},
-		{"float64", types.Column{GoType: "float64"}, "strconv.ParseFloat(v, 64)"},
-		{"string", types.Column{GoType: "string"}, "v"},
-		{"bool", types.Column{GoType: "bool"}, "strconv.ParseBool(v)"},
-	}
-	for _, tc := range tests {
-		got := createConv(&tc.col)
-		if got != tc.want {
-			t.Errorf("createConv(%s) = %s, want %s", tc.name, got, tc.want)
-		}
-	}
-}
-
 func TestTemplateFuncs_ScanType(t *testing.T) {
 	tests := []struct {
 		name string

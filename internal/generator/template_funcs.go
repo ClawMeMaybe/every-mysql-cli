@@ -6,21 +6,34 @@ import (
 	"github.com/kefan/every-mysql-cli/internal/types"
 )
 
-// TemplateFuncs returns template functions for code generation.
 func TemplateFuncs() map[string]interface{} {
 	return map[string]interface{}{
-		"lower":       strings.ToLower,
-		"title":       strings.Title,
-		"hasPK":       func(t *types.Table) bool { return t.PrimaryKey != nil && len(t.PrimaryKey.Columns) > 0 },
-		"pkCol0":      func(t *types.Table) string { if t.PrimaryKey != nil && len(t.PrimaryKey.Columns) > 0 { return t.PrimaryKey.Columns[0] }; return "" },
-		"scanType":    scanType,
-		"valueStr":    valueStr,
-		"valueJSON":   valueJSON,
-		"createConv":  createConv,
-		"isString":    func(c *types.Column) bool { return c.GoType == "string" },
-		"isAutoInc":   func(c *types.Column) bool { return c.AutoIncrement },
-		"isNullable":  func(c *types.Column) bool { return c.Nullable },
+		"lower":        strings.ToLower,
+		"title":        strings.Title,
+		"hasPK":        func(t *types.Table) bool { return t.PrimaryKey != nil && len(t.PrimaryKey.Columns) > 0 },
+		"pkCol0":       func(t *types.Table) string { if t.PrimaryKey != nil && len(t.PrimaryKey.Columns) > 0 { return t.PrimaryKey.Columns[0] }; return "" },
+		"needsOS":      needsOS,
+		"needsStrconv": needsStrconv,
+		"scanType":     scanType,
+		"valueStr":     valueStr,
+		"valueJSON":    valueJSON,
+		"isString":     func(c *types.Column) bool { return c.GoType == "string" },
+		"isAutoInc":    func(c *types.Column) bool { return c.AutoIncrement },
+		"isNullable":   func(c *types.Column) bool { return c.Nullable },
 	}
+}
+
+func needsOS(t *types.Table) bool {
+	return t.PrimaryKey != nil && len(t.PrimaryKey.Columns) > 0
+}
+
+func needsStrconv(t *types.Table) bool {
+	for _, c := range t.Columns {
+		if c.GoType == "int64" || c.GoType == "float64" || c.GoType == "bool" {
+			return true
+		}
+	}
+	return false
 }
 
 func scanType(col *types.Column) string {
@@ -82,17 +95,4 @@ func valueJSON(col *types.Column) string {
 		}
 	}
 	return n
-}
-
-func createConv(col *types.Column) string {
-	switch col.GoType {
-	case "int64":
-		return "strconv.ParseInt(v, 10, 64)"
-	case "float64":
-		return "strconv.ParseFloat(v, 64)"
-	case "bool":
-		return "strconv.ParseBool(v)"
-	default:
-		return "v"
-	}
 }

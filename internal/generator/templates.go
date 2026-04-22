@@ -217,9 +217,9 @@ const TableCmdTemplate = `package main
 import (
 	"database/sql"
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
+{{ if needsOS . }}	"os"
+{{ end }}{{ if needsStrconv . }}	"strconv"
+{{ end }}	"strings"
 	"github.com/spf13/cobra"
 )
 
@@ -297,7 +297,6 @@ func {{ .Name }}ListCmd(db *sql.DB) *cobra.Command {
 			}
 			defer rows.Close()
 
-			cols, _ := rows.Columns()
 {{ range .Columns }}
 {{ if .Nullable }}
 {{ if eq .GoType "int64" }}
@@ -321,7 +320,11 @@ func {{ .Name }}ListCmd(db *sql.DB) *cobra.Command {
 {{ end }}
 			}
 
-			for rows.Scan(scanArgs...) == nil {
+			for rows.Next() {
+				if err := rows.Scan(scanArgs...); err != nil {
+					if jsonMode { printJSONError("QUERY_ERROR", err.Error()) }
+					return err
+				}
 				row := []string{
 {{ range .Columns }}
 					{{ valueStr . }},
@@ -341,6 +344,7 @@ func {{ .Name }}ListCmd(db *sql.DB) *cobra.Command {
 			if jsonMode {
 				printJSONList(jsonData, len(jsonData), limit, offset)
 			} else {
+				cols, _ := rows.Columns()
 				printTable(cols, tableRows)
 			}
 			return nil
@@ -411,7 +415,8 @@ func {{ .Name }}GetCmd(db *sql.DB) *cobra.Command {
 			}
 {{ range .ReferencedBy }}
 			if with{{ .SourceTable }}, _ := cmd.Flags().GetBool("with-{{ .SourceTable }}"); with{{ .SourceTable }} {
-				_ = db.Query("SELECT * FROM {{ .SourceTable }} WHERE {{ .SourceColumn }} = ?", pkVal)
+				subRows, subErr := db.Query("SELECT * FROM {{ .SourceTable }} WHERE {{ .SourceColumn }} = ?", pkVal)
+				if subErr == nil { subRows.Close() }
 			}
 {{ end }}
 			keys := []string{ {{ range .Columns }}"{{ .Name }}", {{ end }} }
@@ -450,7 +455,17 @@ func {{ .Name }}CreateCmd(db *sql.DB) *cobra.Command {
 			if v, _ := cmd.Flags().GetString("{{ .Name }}"); v != "" {
 				columns = append(columns, "{{ .Name }}")
 				placeholders = append(placeholders, "?")
-				values = append(values, {{ createConv . }})
+{{ if eq .GoType "int64" }}
+				ival, err := strconv.ParseInt(v, 10, 64)
+				if err != nil { return err }
+				values = append(values, ival)
+{{ else if eq .GoType "float64" }}
+				fval, err := strconv.ParseFloat(v, 64)
+				if err != nil { return err }
+				values = append(values, fval)
+{{ else }}
+				values = append(values, v)
+{{ end }}
 			}
 {{ end }}
 {{ end }}
@@ -504,7 +519,17 @@ func {{ .Name }}UpdateCmd(db *sql.DB) *cobra.Command {
 {{ if not .AutoIncrement }}
 			if v, _ := cmd.Flags().GetString("{{ .Name }}"); v != "" {
 				setClauses = append(setClauses, "{{ .Name }} = ?")
-				values = append(values, {{ createConv . }})
+{{ if eq .GoType "int64" }}
+				ival, err := strconv.ParseInt(v, 10, 64)
+				if err != nil { return err }
+				values = append(values, ival)
+{{ else if eq .GoType "float64" }}
+				fval, err := strconv.ParseFloat(v, 64)
+				if err != nil { return err }
+				values = append(values, fval)
+{{ else }}
+				values = append(values, v)
+{{ end }}
 			}
 {{ end }}
 {{ end }}
