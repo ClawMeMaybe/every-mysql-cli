@@ -96,6 +96,18 @@ services:
 
 Orchestrates the full flow: convert → start Docker → generate → validate → tear down.
 
+### 4. Fixture Loader (`internal/bench/fixtures.go`)
+
+Handles the archer-bench dataset:
+
+```go
+func EnsureDatabaseZip() (string, error)  // Returns path to database.zip, downloads if missing
+func ExtractSQLiteFiles(zipPath string, destDir string) ([]string, error)  // Extracts .sqlite files
+```
+
+- `EnsureDatabaseZip` checks if `testdata/archer-bench/database.zip` exists locally; if not, downloads from `https://sig4kg.github.io/archer-bench/dataset/database.zip`
+- `ExtractSQLiteFiles` extracts only `.sqlite` files (skipping `.db` files which are empty and `.ipynb_checkpoints`)
+
 ## Project Structure
 
 New files:
@@ -109,10 +121,10 @@ internal/bench/
 docker-compose.yaml   # MySQL 8 container for benchmark
 testdata/
   archer-bench/
-    database.zip      # Downloaded from archer-bench (or fetched at test time)
+    database.zip      # Fetched by EnsureDatabaseZip() if not present locally; not committed to repo (6.5MB)
 ```
 
-Converted SQL files written to `testdata/archer-bench/sql/` at runtime.
+Converted SQL files written to `testdata/archer-bench/sql/` at runtime. Both `database.zip` and `sql/` are gitignored — they are fetched/generated on demand.
 
 ## Validation Design
 
@@ -125,7 +137,7 @@ For each table in each generated CLI, run a full CRUD cycle:
 | Create | `<cli> <table> create --col1 val1 --col2 val2` | Exit code 0, stdout contains inserted row |
 | Read back | `<cli> <table> list --json` | JSON output contains the created row with matching values |
 | Get by PK | `<cli> <table> get <pk_val> --json` | JSON output has exactly that row |
-| Update | `<cli> <table> update <pk_val> --col1 newval --force` | Exit code 0 |
+| Update | `<cli> <table> update <pk_val> --col1 newval` | Exit code 0 |
 | Verify update | `<cli> <table> get <pk_val> --json` | Updated column shows newval |
 | Delete | `<cli> <table> delete <pk_val> --force` | Exit code 0 |
 | Verify delete | `<cli> <table> get <pk_val> --json` | Empty result or error (row gone) |
@@ -136,7 +148,7 @@ Tables without a PK skip get, update, delete — only list and create are valida
 
 | Check | What it tests | Expected behavior |
 |---|---|---|
-| Tables with no PK | hospital_1 has tables with composite PK only | Generated CLI omits get/update/delete, logs note during init |
+| Tables with composite PKs | hospital_1 has Affiliated_With with composite PK (Physician, Department) | Generated CLI omits single-PK get/update/delete for that table, supports composite PK variants |
 | Composite PK tables | e.g., Affiliated_With(Physician, Department) | get/update/delete accept two PK arguments |
 | Nullable columns | Many tables have nullable fields | create works with omitted nullable flags, returns null in JSON |
 | Empty result set | `<cli> <table> get 99999` | Returns empty/zero-result gracefully, no crash |
@@ -151,7 +163,7 @@ Test outputs a structured summary per database:
 
 ```
 === world_1 ===
-  Tables: 4 (city, country, countrylanguage)
+  Tables: 3 (city, country, countrylanguage)
   CRUD: PASS (4/4 tables)
   Robustness: PASS (6/7 checks — no inbound FK references in this schema)
 ```
