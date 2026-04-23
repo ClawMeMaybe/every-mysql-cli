@@ -1,0 +1,15 @@
+services:
+  bench-mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: benchroot
+      MYSQL_ROOT_HOST: "%"
+    ports:
+      - "13306:3306"
+    volumes:
+      - ./testdata/archer-bench/sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pbenchroot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
