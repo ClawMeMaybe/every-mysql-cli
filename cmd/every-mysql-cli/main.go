@@ -5,12 +5,13 @@ import (
 	"os"
 
 	"github.com/kefan/every-mysql-cli/internal/generator"
+	"github.com/kefan/every-mysql-cli/internal/types"
 	"github.com/spf13/cobra"
 )
 
 var (
 	host     string
-	port     int
+	port     string
 	user     string
 	password string
 	database string
@@ -30,7 +31,7 @@ func main() {
 	}
 
 	initCmd.Flags().StringVar(&host, "host", "localhost", "MySQL host")
-	initCmd.Flags().IntVar(&port, "port", 3306, "MySQL port")
+	initCmd.Flags().StringVar(&port, "port", "3306", "MySQL port")
 	initCmd.Flags().StringVar(&user, "user", "root", "MySQL user")
 	initCmd.Flags().StringVar(&password, "password", "", "MySQL password")
 	initCmd.Flags().StringVar(&database, "database", "", "MySQL database name (required)")
@@ -52,9 +53,16 @@ func runInit(cmd *cobra.Command, args []string) error {
 		output = fmt.Sprintf("./%s-cli", database)
 	}
 
-	fmt.Printf("Scanning schema from %s@%s:%d/%s...\n", user, host, port, database)
+	fmt.Printf("Connecting to %s@%s:%s/%s ...\n", user, host, port, database)
 
-	schema, err := generator.Scan(host, port, user, password, database)
+	scanner, err := generator.NewScanner(host, port, user, password, database)
+	if err != nil {
+		return fmt.Errorf("scan schema: %w", err)
+	}
+	defer scanner.Close()
+
+	fmt.Println("Scanning schema...")
+	schema, err := scanner.Scan()
 	if err != nil {
 		return fmt.Errorf("scan schema: %w", err)
 	}
@@ -66,12 +74,17 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("generate CLI: %w", err)
 	}
 
-	fmt.Printf("CLI binary built at %s/%s-cli\n", output, database)
-	fmt.Printf("Usage: %s/%s-cli <table> <action> [flags]\n", output, database)
+	if err := generator.WriteConfig(schema, host, port, user, password); err != nil {
+		fmt.Printf("Warning: could not write config file: %v\n", err)
+	}
+
+	binaryPath := output + "/" + database + "-cli"
+	fmt.Printf("\nSuccess! Generated CLI at %s\n", binaryPath)
+	fmt.Printf("Usage: %s <table> <action> [flags]\n", binaryPath)
 	return nil
 }
 
-func tableNames(schema *generator.Schema) []string {
+func tableNames(schema *types.Schema) []string {
 	names := make([]string, len(schema.Tables))
 	for i, t := range schema.Tables {
 		names[i] = t.Name
