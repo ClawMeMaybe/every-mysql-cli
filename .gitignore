@@ -8,6 +8,10 @@ every-mysql-cli
 # Test binary
 *.test
 
+# Archer-bench test data
+testdata/archer-bench/database.zip
+testdata/archer-bench/sql/
+
 # Go workspace
 go.work
 
